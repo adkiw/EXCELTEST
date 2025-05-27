@@ -5,7 +5,7 @@ import hashlib
 
 # Streamlit konfiguracija
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė su datų intervalu ir deterministiniu random")
+st.title("DISPO – Planavimo lentelė su datų intervalu, savaitės dienomis ir deterministiniu random")
 
 # 1) Pagalbinė funkcija – suranda pirmadienį duotai datai
 def iso_monday(d: date) -> date:
@@ -17,22 +17,30 @@ this_monday = iso_monday(today)
 start_default = this_monday - timedelta(weeks=2)
 end_default   = this_monday + timedelta(weeks=2, days=6)
 
-# 3) Streamlit datos intervalo pasirinkimas
-date_range = st.date_input(
-    "Pasirinkite datų intervalą:",
-    value=(start_default, end_default),
-    min_value=start_default - timedelta(weeks=4),
-    max_value=end_default + timedelta(weeks=4)
-)
+# 3) Du atskiri laukai: pradžia ir pabaiga
+col1, col2 = st.columns(2)
+with col1:
+    start_sel = st.date_input(
+        "Pradžios data:",
+        value=start_default,
+        min_value=start_default - timedelta(weeks=4),
+        max_value=end_default + timedelta(weeks=4)
+    )
+with col2:
+    end_sel = st.date_input(
+        "Pabaigos data:",
+        value=end_default,
+        min_value=start_default - timedelta(weeks=4),
+        max_value=end_default + timedelta(weeks=4)
+    )
 
-# 4) Išskaidome start_date ir end_date
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    start_date, end_date = date_range
+# 4) Jeigu pabaiga anksčiau už pradžią, keičiame eilės tvarką
+if end_sel < start_sel:
+    start_date, end_date = end_sel, start_sel
 else:
-    # jei pasirinko vieną datą
-    start_date = end_date = date_range
+    start_date, end_date = start_sel, end_sel
 
-# 5) Sugeneruojame dates sąrašą
+# 5) Sugeneruojame dates sąrašą tarp start_date ir end_date
 num_days = (end_date - start_date).days + 1
 dates = [
     (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
@@ -76,7 +84,7 @@ sel_eksp = st.multiselect(
     default=all_eksp
 )
 
-# 10) CSS stilius lentelės atvaizdavimui
+# 10) CSS stilius lentelės marginimui
 st.markdown("""
 <style>
   table {border-collapse: collapse; width:100%; margin-top:10px;}
@@ -104,11 +112,13 @@ for i in range(1, total_cols + 1):
     html += f"<th>{i}</th>"
 html += "</tr>\n"
 
-# 13.2) Antroji eilutė: tuščias blokas virš “common+Pastabos” + datos
+# 13.2) Antroji eilutė: tuščias blokas virš “common+Pastabos” + datos su savaitės dienom
 html += "<tr><th></th>"
 html += f'<th colspan="{total_common}"></th>'
 for d in dates:
-    html += f'<th colspan="{len(day_headers)}">{d}</th>'
+    # pavadinimo formatas: YYYY-MM-DD (Mo)
+    weekday = datetime.strptime(d, "%Y-%m-%d").strftime("%a")
+    html += f'<th colspan="{len(day_headers)}">{d} ({weekday})</th>'
 html += "</tr>\n"
 
 # 13.3) Trečioji eilutė: faktiniai header’iai
