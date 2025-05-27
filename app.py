@@ -1,13 +1,45 @@
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import random
 import hashlib
 
 # Streamlit konfiguracija
 st.set_page_config(layout="wide")
-st.title("DISPO – 5 savaičių intervalas su tuščiais stulpeliais po šeštadienio")
+st.title("DISPO – Planavimo lentelė su datų intervalu ir deterministiniu random")
 
-# 1) Bendri header’iai
+# 1) Pagalbinė funkcija – suranda pirmadienį duotai datai
+def iso_monday(d: date) -> date:
+    return d - timedelta(days=(d.isoweekday() - 1))
+
+# 2) Numatytoji intervalo riba (−2 savaitės pirmadienis … +2 savaitės sekmadienis)
+today = date.today()
+this_monday = iso_monday(today)
+start_default = this_monday - timedelta(weeks=2)
+end_default   = this_monday + timedelta(weeks=2, days=6)
+
+# 3) Streamlit datos intervalo pasirinkimas
+start_sel, end_sel = st.date_input(
+    "Pasirinkite datų intervalą:",
+    value=(start_default, end_default),
+    min_value=start_default - timedelta(weeks=4),
+    max_value=end_default + timedelta(weeks=4)
+)
+
+# 4) Atskiriame datas ir generuojame sąrašą
+if isinstance(start_sel, tuple):
+    start_date, end_date = start_sel
+else:
+    start_date = end_date = start_sel
+
+num_days = (end_date - start_date).days + 1
+dates = [
+    (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
+    for i in range(num_days)
+]
+
+st.write(f"Rodyti {num_days} dienų nuo {start_date} iki {end_date}.")
+
+# 5) Bendri header’iai (įskaitant “Pastabos”)
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -15,7 +47,7 @@ common_headers = [
     "Vair. sk.", "Savaitinė atstova", "Pastabos"
 ]
 
-# 2) Dienos sub-header’iai
+# 6) Dienos sub-header’iai
 day_headers = [
     "B. d. laikas", "L. d. laikas",
     "Atvykimo laikas", "Laikas nuo",
@@ -25,26 +57,7 @@ day_headers = [
     "Frachtas"
 ]
 
-# 3) Sugeneruojam 5 savaičių intervalą (2 savaitės atgal, 2 į priekį, nuo pirmadienio iki sekmadienio)
-today = datetime.today().date()
-current_monday = today - timedelta(days=today.weekday())
-start_date = current_monday - timedelta(weeks=2)
-end_date   = current_monday + timedelta(weeks=2, days=6)
-
-all_dates = []
-d = start_date
-while d <= end_date:
-    all_dates.append(d)
-    d += timedelta(days=1)
-
-# 4) Įterpiam po kiekvieno šeštadienio 10 tuščių vietų
-processed_dates = []
-for d in all_dates:
-    processed_dates.append(d)
-    if d.weekday() == 5:  # 5 = šeštadienis
-        processed_dates += [None] * 10
-
-# 5) Testiniai duomenys apie vilkikus ir ekspeditorius
+# 7) Testiniai duomenys apie vilkikus ir ekspeditorius
 trucks_info = [
     ("1", "2", "ABC123", "Tomas Mickus",     "Laura", "PRK001", 2, 24),
     ("1", "3", "XYZ789", "Greta Kairytė",    "Jonas", "PRK009", 1, 45),
@@ -53,7 +66,7 @@ trucks_info = [
     ("2", "5", "JKL654", "Jonas Petrauskas", "Rasa",  "PRK321", 2, 24),
 ]
 
-# 6) Filtras pagal ekspeditorius
+# 8) Filtras pagal ekspeditorių vardus
 all_eksp = sorted({t[3] for t in trucks_info})
 sel_eksp = st.multiselect(
     "Filtruok pagal ekspeditorius",
@@ -61,7 +74,7 @@ sel_eksp = st.multiselect(
     default=all_eksp
 )
 
-# 7) CSS stilius
+# 9) CSS stilius lentelės marginimui
 st.markdown("""
 <style>
   table {border-collapse: collapse; width:100%; margin-top:10px;}
@@ -70,106 +83,88 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 8) Deterministinis Random pagal sunkvežimio nr. ir datą
+# 10) Funkcija deterministiniam Random (kad filtravimas nekeistų skaičių)
 def get_rnd(truck: str, day: str) -> random.Random:
     seed = int(hashlib.md5(f"{truck}-{day}".encode()).hexdigest(), 16)
     return random.Random(seed)
 
-# 9) Sudarome visą cols sąrašą
-cols = common_headers.copy()
-for item in processed_dates:
-    if item is None:
-        # 10 tuščių stulpelių be datos
-        cols += day_headers
-    else:
-        cols += [f"{item.strftime('%Y-%m-%d')} – {h}" for h in day_headers]
+# 11) Skaičiuojame bendrą stulpelių skaičių
+total_common = len(common_headers)            # 9
+total_day_cols = len(dates) * len(day_headers)
+total_cols = total_common + total_day_cols   # viso
 
-# 10) Apskaičiuojame bendrą stulpelių skaičių
-total_cols = len(cols)
-
-# 11) Pradedame kurti lentelę
+# 12) Pradedame kurti lentelės HTML
 html = "<table>\n"
 
-# 11.1) Numeracijos eilutė
+# 12.1) Pirmoji eilutė: numeracija
 html += "<tr><th></th>"
 for i in range(1, total_cols + 1):
     html += f"<th>{i}</th>"
 html += "</tr>\n"
 
-# 11.2) Antroji eilutė: tuščias virš common+Pastabos, po to datos/tuščios grupės su colspan
+# 12.2) Antroji eilutė: tuščias blokas virš “common+Pastabos” + datos
 html += "<tr><th></th>"
-# common_headers ilgis = 9
-html += f'<th colspan="{len(common_headers)}"></th>'
-for item in processed_dates:
-    if item is None:
-        html += f'<th colspan="{len(day_headers)}"></th>'
-    else:
-        html += f'<th colspan="{len(day_headers)}">{item.strftime("%Y-%m-%d")}</th>'
+html += f'<th colspan="{total_common}"></th>'
+for d in dates:
+    html += f'<th colspan="{len(day_headers)}">{d}</th>'
 html += "</tr>\n"
 
-# 11.3) Trečioji eilutė: faktiniai header’iai be datos prefikso
+# 12.3) Trečioji eilutė: faktiniai header’iai be datos prefikso
 html += "<tr><th>#</th>"
 for h in common_headers:
     html += f"<th>{h}</th>"
-for item in processed_dates:
+for _ in dates:
     for hh in day_headers:
         html += f"<th>{hh}</th>"
 html += "</tr>\n"
 
-# 12) Užpildome eilutes
+# 13) Užpildome lentelės eilutes
 row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     if eksp not in sel_eksp:
         continue
 
-    # IŠKROVIMAS
+    # 13.1) IŠKROVIMAS (pirmoji eilutė)
     html += f"<tr><td>{row_num}</td>"
     for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
         html += f'<td rowspan="2">{val}</td>'
     html += "<td></td>"  # Pastabos
-    for item in processed_dates:
-        rnd = get_rnd(truck, str(item) if item else f"{truck}-empty")
-        if item is None:
-            # tušti langeliai
-            html += ("<td></td>" * len(day_headers))
-        else:
-            atvykimo = f"{rnd.randint(0,23):02d}:{rnd.randint(0,59):02d}"
-            city     = rnd.choice(["Vilnius","Kaunas","Berlin"])
-            html += (
-                "<td></td><td></td>"
-                f"<td>{atvykimo}</td>"
-                "<td></td><td></td>"
-                f"<td>{city}</td>"
-                + "<td></td>" * 5
-            )
+    for d in dates:
+        rnd = get_rnd(truck, d)
+        atvykimo = f"{rnd.randint(0,23):02d}:{rnd.randint(0,59):02d}"
+        city     = rnd.choice(["Vilnius","Kaunas","Berlin"])
+        html += (
+            "<td></td><td></td>"
+            f"<td>{atvykimo}</td>"
+            "<td></td><td></td>"
+            f"<td>{city}</td>"
+            + "<td></td>" * 5
+        )
     html += "</tr>\n"
 
-    # PAKROVIMAS
+    # 13.2) PAKROVIMAS (antroji eilutė)
     html += f"<tr><td>{row_num+1}</td>"
-    html += "<td></td>" * len(common_headers)  # Pastabos įskaičiuota
-    for item in processed_dates:
-        rnd = get_rnd(truck, str(item) if item else f"{truck}-empty2")
-        if item is None:
-            html += ("<td></td>" * len(day_headers))
-        else:
-            t1   = f"{rnd.randint(7,9):02d}:00"
-            kms  = rnd.randint(20,120)
-            costs= kms * 5
-            fr   = round(rnd.uniform(800,1200), 2)
-            city = rnd.choice(["Riga","Poznan"])
-            html += (
-                "<td>9</td><td>6</td>"
-                f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
-                f"<td>{city}</td>"
-                "<td></td>"
-                f"<td>{kms}</td><td>{costs}</td>"
-                "<td></td>"
-                f"<td>{fr}</td>"
-            )
+    html += "<td></td>" * total_common
+    for d in dates:
+        rnd    = get_rnd(truck, d)
+        t1     = f"{rnd.randint(7,9):02d}:00"
+        kms    = rnd.randint(20,120)
+        costs  = kms * 5
+        fr     = round(rnd.uniform(800,1200), 2)
+        dest   = rnd.choice(["Riga","Poznan"])
+        html += (
+            "<td>9</td><td>6</td>"
+            f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
+            f"<td>{dest}</td>"
+            "<td></td>"
+            f"<td>{kms}</td><td>{costs}</td>"
+            "<td></td>"
+            f"<td>{fr}</td>"
+        )
     html += "</tr>\n"
     row_num += 2
 
 html += "</table>"
 
-# 13) Atvaizduojame lentelę
+# 14) Atvaizdavimas
 st.markdown(html, unsafe_allow_html=True)
