@@ -2,11 +2,11 @@ import streamlit as st
 from datetime import datetime, timedelta
 import random
 
-# Pagrindinės Streamlit nustatymus
+# Pagrindinės Streamlit nustatymas
 st.set_page_config(layout="wide")
 st.title("DISPO – Planavimo lentelė su merged cells ir ekspeditoriaus filtru")
 
-# 1) Bendri headeriai
+# 1) Bendri header’iai
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -14,11 +14,11 @@ common_headers = [
     "Vair. sk.", "Savaitinė atstova"
 ]
 
-# 2) Dienų sąrašas (pvz. per 10 dienų nuo šiandien)
+# 2) Datos – per 10 dienų nuo šiandien
 start = datetime.today().date()
 dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 
-# 3) Dienos sub-headeriai
+# 3) Dienos sub-header’iai (jie kartosis po kiekvienos datos)
 day_headers = [
     "B. darbo laikas", "L. darbo laikas",
     "Atvykimo laikas", "Laikas nuo",
@@ -28,7 +28,7 @@ day_headers = [
     "Frachtas"
 ]
 
-# 4) Bandinių duomenys apie vilkikus ir ekspeditorius
+# 4) Testiniai duomenys
 trucks_info = [
     ("1", "2", "ABC123", "Tomas Mickus",     "Laura", "PRK001", 2, 24),
     ("1", "3", "XYZ789", "Greta Kairytė",    "Jonas", "PRK009", 1, 45),
@@ -37,7 +37,7 @@ trucks_info = [
     ("2", "5", "JKL654", "Jonas Petrauskas", "Rasa",  "PRK321", 2, 24),
 ]
 
-# 5) Filtras pagal ekspeditorių vardus
+# 5) Filtras pagal ekspeditorius
 all_eksp = sorted({t[3] for t in trucks_info})
 sel_eksp = st.multiselect(
     "Filtruok pagal ekspeditorius",
@@ -54,65 +54,73 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 7) Sudarome pilną stulpelių sąrašą
-cols = common_headers + [""]  # 8 headeriai + dummy “Pastabos”
-for d in dates:
-    cols += [f"{d} – {h}" for h in day_headers]
-
-# 8) Kuriame HTML lentelę
+# 7) Kuriame HTML lentelę
 html = "<table>\n"
 
-# 8.1) Pirmoji eilutė: numeracija 1,2,3…
+# 7.1) Pirmoji eilutė: numeracijos stulpeliai
 html += "<tr><th></th>"
-for i in range(1, len(cols) + 1):
+# suskaičiuojam, kiek stulpelių turėsim: 8 common + 1 Pastabos + dates*len(day_headers)
+total_common = len(common_headers) + 1  
+total_day_cols = len(dates) * len(day_headers)
+total_cols = total_common + total_day_cols
+for i in range(1, total_cols + 1):
     html += f"<th>{i}</th>"
 html += "</tr>\n"
 
-# 8.2) Antroji eilutė: “Pastabos” + datos su colspan
+# 7.2) Antroji eilutė: tuščias blokas virš pirmų 9 stulpelių + datos su colspan
 html += "<tr><th></th>"
-html += '<th colspan="9">Pastabos</th>'
+html += f'<th colspan="{total_common}"></th>'  # tuščias virš “common + Pastabos”
 for d in dates:
     html += f'<th colspan="{len(day_headers)}">{d}</th>'
 html += "</tr>\n"
 
-# 8.3) Trečioji eilutė: faktiniai header tekstai
+# 7.3) Trečioji eilutė: # + realūs header’iai (be datos prefikso)
 html += "<tr><th>#</th>"
-for h in cols:
+# bendri header’iai + Pastabos
+for h in common_headers + ["Pastabos"]:
     html += f"<th>{h}</th>"
+# po to – sub-header’iai kiekvienai datai
+for _ in dates:
+    for hh in day_headers:
+        html += f"<th>{hh}</th>"
 html += "</tr>\n"
 
-# 9) Lentelės eilutės pagal pasirinkimus
+# 8) Užpildome eilutes pagal filtrą ir duomenis
 row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     if eksp not in sel_eksp:
         continue
 
-    # IŠKROVIMAS (pirmoji from-to eilutė)
+    # IŠKROVIMAS
     html += f"<tr><td>{row_num}</td>"
+    # rowspan du cell’ai – bendri duomenys
     for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
-        html += f'<td rowspan="2">{val}</td>'
-    html += "<td></td>"  # dummy Pastabos langelis
+        html += '<td rowspan="2">{}</td>'.format(val)
+    # į Pastabos kol įterpiam tuščią td
+    html += "<td></td>"
+    # toliau datos x sub-header’iai
     for _ in dates:
         t = datetime.now().strftime("%H:%M")
         city = random.choice(["Vilnius", "Kaunas", "Berlin"])
         html += (
-            "<td></td><td></td>"  # B. darbo, L. darbo
-            f"<td>{t}</td>"        # Atvykimo laikas
-            "<td></td><td></td>"   # Laikas nuo / iki
-            f"<td>{city}</td>"     # Vieta
+            "<td></td><td></td>"    # B. darbo, L. darbo
+            f"<td>{t}</td>"          # Atvykimo laikas
+            "<td></td><td></td>"     # Laikas nuo / iki
+            f"<td>{city}</td>"       # Vieta
             "<td></td><td></td><td></td><td></td><td></td>"
         )
     html += "</tr>\n"
 
-    # PAKROVIMAS (antroji from-to eilutė)
+    # PAKROVIMAS
     html += f"<tr><td>{row_num+1}</td>"
-    html += "<td></td>" * (len(common_headers) + 1)
+    # pirmi 9 tušti
+    html += "<td></td>" * total_common
     for _ in dates:
         t1  = f"{random.randint(7,9)}:00"
         kms = random.randint(20,120)
         fr  = round(random.uniform(800,1200), 2)
         html += (
-            "<td>9</td><td>6</td>"     # B. darbo, L. darbo
+            "<td>9</td><td>6</td>"
             f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
             f"<td>{random.choice(['Riga','Poznan'])}</td>"
             "<td></td>"
@@ -125,5 +133,5 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 html += "</table>"
 
-# 10) Atvaizduojame lentelę
+# 9) Atvaizduojame
 st.markdown(html, unsafe_allow_html=True)
