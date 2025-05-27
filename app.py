@@ -1,10 +1,12 @@
-import pandas as pd
-from datetime import datetime, timedelta
-import random
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+import pandas as pd
+import random
+from datetime import datetime, timedelta
 
-# Data preparation
+st.set_page_config(layout="wide")
+st.title("DISPO – Planavimo lentelė su freezes ir filtrais")
+
+# 1) Duomenų paruošimas
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -16,77 +18,89 @@ dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 day_headers = [
     "B. darbo laikas", "L. darbo laikas",
     "Atvykimo laikas", "Laikas nuo",
-    "Laikas iki",       "Vieta",
-    "Atsakingas",      "Tušti km",
-    "Krauti km",       "Kelių išlaidos",
+    "Laikas iki",        "Vieta",
+    "Atsakingas",       "Tušti km",
+    "Krauti km",        "Kelių išlaidos",
     "Frachtas"
 ]
 trucks_info = [
-    ("1","2","ABC123","Tomas","Laura","PRK001",2,24),
-    ("1","3","XYZ789","Greta","Jonas","PRK009",1,45),
-    ("2","1","DEF456","Rasa","Tomas","PRK123",2,24),
+    ("1","2","ABC123","Tomas Mickus","Laura","PRK001",2,24),
+    ("1","3","XYZ789","Greta Kairytė","Jonas","PRK009",1,45),
+    ("2","1","DEF456","Rasa Mikalausk.","Tomas","PRK123",2,24),
     ("3","4","GHI321","Laura","Greta","PRK555",1,45),
-    ("2","5","JKL654","Jonas","Rasa","PRK321",2,24),
+    ("2","5","JKL654","Jonas Petrauskas","Rasa","PRK321",2,24),
 ]
 
-# Build DataFrame
-rows = []
-for tr in trucks_info:
-    tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst = tr
-    for phase in ["Iškrovimas", "Pakrovimas"]:
-        row = dict(zip(common_headers, [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst])) if phase == "Iškrovimas" else {h: "" for h in common_headers}
-        row["Fazė"] = phase
-        for d in dates:
-            for h in day_headers:
-                col = f"{d} – {h}"
-                if phase == "Iškrovimas":
-                    if h == "Atvykimo laikas":
-                        row[col] = datetime.now().strftime("%H:%M")
-                    elif h == "Vieta":
-                        row[col] = random.choice(["Vilnius","Kaunas","Riga"])
-                    else:
-                        row[col] = ""
-                else:
-                    if h == "B. darbo laikas":
-                        row[col] = random.randint(8,10)
-                    elif h == "L. darbo laikas":
-                        row[col] = random.randint(4,6)
-                    elif h == "Atvykimo laikas":
-                        row[col] = f"{random.randint(7,9)}:00"
-                    elif h == "Laikas nuo":
-                        row[col] = "08:00"
-                    elif h == "Laikas iki":
-                        row[col] = "16:00"
-                    elif h == "Vieta":
-                        row[col] = random.choice(["Poznan","Tallinn"])
-                    elif h == "Frachtas":
-                        row[col] = round(random.uniform(800,1200),2)
-                    else:
-                        row[col] = ""
-        rows.append(row)
-df = pd.DataFrame(rows)
+# 2) Filtras pagal ekspeditorių
+all_exps = sorted({exp for *_, exp, *_ in trucks_info})
+sel_exps = st.multiselect("Filtruok pagal ekspeditorių", options=all_exps, default=all_exps)
 
-# Streamlit UI
-st.set_page_config(layout="wide")
-st.title("DISPO – Interaktyvi lentelė su freeze ir filtro 'Ekspeditorius'")
+# 3) CSS su sticky header ir sticky pirmomis 10 kolonomis
+cell_w = 120  # px
+css = """
+<style>
+  .tbl {border-collapse: collapse; width:100%; overflow: auto;}
+  .tbl th, .tbl td {border:1px solid #ccc; min-width:100px; padding:4px; text-align:center;}
+  .tbl th {position: sticky; top: 0; background:white; z-index:3;}
+"""
+# sticky columns 1..10
+for i in range(1, 11):
+    left = (i-1)*cell_w
+    css += f"""
+  .tbl th:nth-child({i}), .tbl td:nth-child({i}) {{
+    position: sticky; left: {left}px; background:white; z-index:{4 if i==1 else 2};
+  }}
+"""
+css += "</style>"
+st.markdown(css, unsafe_allow_html=True)
 
-# AgGrid options
-gb = GridOptionsBuilder.from_dataframe(df)
-gb.configure_default_column(filter="agTextColumnFilter", sortable=True, resizable=True, floatingFilter=True)
-# Freeze (pin) first 10 columns
-for col in df.columns[:10]:
-    gb.configure_column(col, pinned='left')
-# Add filter on 'Ekspeditorius' explicitly
-gb.configure_column("Ekspeditorius", filter="agTextColumnFilter", sortable=True)
-grid_options = gb.build()
-# Pin first data row to top
-grid_options['pinnedTopRowData'] = [df.iloc[0].to_dict()]
+# 4) Sudarome visų stulpelių eilutes
+cols = common_headers + [""]  # dummy po "Savaitinė atstova"
+for d in dates:
+    for h in day_headers:
+        cols.append(f"{d} – {h}")
 
-# Display
-AgGrid(
-    df,
-    gridOptions=grid_options,
-    enable_enterprise_modules=False,
-    theme="streamlit",
-    fit_columns_on_grid_load=True
-)
+# 5) Pradedame rašyti HTML lentelę
+html = '<div style="overflow-x:auto"><table class="tbl">'
+# a) headeriai eilutė spausdinam pavadinimus
+html += "<tr><th></th>"
+for h in cols:
+    html += f"<th>{h}</th>"
+html += "</tr>"
+
+# 6) Pavežių generavimas su rowspan
+row_num = 1
+for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
+    if eksp not in sel_exps:
+        continue
+    # iškrovimas
+    html += "<tr>"
+    html += f"<td>{row_num}</td>"
+    for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
+        html += f'<td rowspan="2">{val}</td>'
+    html += "<td></td>"  # dummy
+    for d in dates:
+        t = datetime.now().strftime("%H:%M")
+        city = random.choice(["Vilnius","Kaunas","Berlin"])
+        html += "<td></td><td></td>"
+        html += f"<td>{t}</td>"
+        html += "<td></td><td></td>"
+        html += f"<td>{city}</td>"
+        html += "<td></td><td></td><td></td><td></td><td></td>"
+    html += "</tr>"
+    # pakrovimas
+    html += "<tr>"
+    html += f"<td>{row_num+1}</td>"
+    html += "<td></td>"*(len(common_headers)+1)
+    for d in dates:
+        t = f"{random.randint(7,9)}:00"
+        km = random.randint(20,120)
+        fr = round(random.uniform(500,1000),2)
+        html += f"<td>9</td><td>6</td><td>{t}</td><td>{t}</td><td>16:00</td><td>{random.choice(['Riga','Poznan'])}</td><td></td><td>{km}</td><td>{km*5}</td><td></td><td>{fr}</td>"
+    html += "</tr>"
+    row_num += 2
+
+html += "</table></div>"
+
+# 7) Atvaizduojame
+st.markdown(html, unsafe_allow_html=True)
