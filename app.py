@@ -3,33 +3,48 @@ from datetime import datetime, timedelta
 import random
 
 st.set_page_config(layout="wide")
+st.title("DISPO – Planavimo lentelė (HTML su rowspan, 5 vilkikai)")
 
-st.title("DISPO – Planavimo lentelė (HTML su rowspan)")
-
-# 1) Apibrėžiame bendrus laukus ir dienų laukus
-common_cols = [
-    ("Transporto grupė", "1"), 
-    ("Ekspedicijos grupės nr.", "2"),
-    ("Vilkiko nr.", "ABC123"),
-    ("Ekspeditorius", "Tomas Mickus"),
-    ("Trans. vadybininkas", "Laura Juknevičienė"),
-    ("Priekabos nr.", "PRK001"),
-    ("Vair. sk.", "2"),
-    ("Savaitinė atstova", "24")
+# ─── 1) Bendri ir dienų stulpeliai ────────────────────────────────────────────
+common_headers = [
+    "Transporto grupė",
+    "Ekspedicijos grupės nr.",
+    "Vilkiko nr.",
+    "Ekspeditorius",
+    "Trans. vadybininkas",
+    "Priekabos nr.",
+    "Vair. sk.",
+    "Savaitinė atstova"
+]
+day_headers = [
+    "Bendras darbo laikas",
+    "Likęs darbo laikas atvykus",
+    "Atvykimo laikas",
+    "Laikas nuo",
+    "Laikas iki",
+    "Vieta",
+    "Atsakingas",
+    "Tušti km",
+    "Krauti km",
+    "Kelių išlaidos (EUR)",
+    "Frachtas (EUR)"
 ]
 
-day_cols = [
-    "Bendras darbo laikas", "Likęs darbo laikas atvykus",
-    "Atvykimo laikas", "Laikas nuo", "Laikas iki",
-    "Vieta", "Atsakingas", "Tušti km", "Krauti km",
-    "Kelių išlaidos (EUR)", "Frachtas (EUR)"
-]
-
-# 2) Sukuriame 10 datų horizontaliai
+# ─── 2) Datos (10 d.) horizontaliai ────────────────────────────────────────────
 start = datetime.today().date()
 dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 
-# 3) Pradedame statyti HTML lentelę
+# ─── 3) Pavyzdiniai 5 vilkikai ────────────────────────────────────────────────
+# kiekvienas įrašas: (tr_grp, exp_grp, truck_nr, eksp, tvad, prk, v_sk, atst)
+trucks_info = [
+    ("1","2","ABC123","Tomas Mickus",   "Laura Juknevičienė","PRK001",2,24),
+    ("1","3","XYZ789","Greta Kairytė",  "Jonas Petrauskas",  "PRK009",1,45),
+    ("2","1","DEF456","Rasa Mikalausk.","Tomas Mickus",     "PRK123",2,24),
+    ("3","4","GHI321","Laura Juknevič.","Greta Kairytė",     "PRK555",1,45),
+    ("2","5","JKL654","Jonas Petrauskas","Rasa Mikalausk.","PRK321",2,24),
+]
+
+# ─── 4) Kuriame HTML ───────────────────────────────────────────────────────────
 html = """
 <style>
   table {border-collapse: collapse; width: 100%;}
@@ -38,57 +53,53 @@ html = """
 </style>
 <table>
   <tr>
-    <!-- headerai -->
-    <th>Transporto grupė</th><th>Ekspedicijos grupės nr.</th>
-    <th>Vilkiko nr.</th><th>Ekspeditorius</th><th>Trans. vadybininkas</th>
-    <th>Priekabos nr.</th><th>Vair. sk.</th><th>Savaitinė atstova</th>
 """
-# pridėti kiekvienos dienos dienų antraštės
+# antraštės
+for h in common_headers:
+    html += f"<th>{h}</th>"
 for d in dates:
-    for dc in day_cols:
-        html += f"<th>{d}<br>– {dc}</th>"
+    for dh in day_headers:
+        html += f"<th>{d}<br>– {dh}</th>"
 html += "</tr>\n"
 
-# 4) Pirmas vilkikas: dvi eilutės
-#   a) IŠKROVIMAS (bendri stulpeliai rowspan=2)
-html += "<tr>"
-for name, val in common_cols:
-    html += f'<td rowspan="2">{val}</td>'
-# Iškrovimo stulpeliai – tik laikas/vieta
-for _ in dates:
-    t = datetime.now().strftime("%H:%M")
-    city = random.choice(["Riga", "Poznan", "Klaipėda"])
-    # įrašome laikas atvykimo/Tušti kiti laukai tušti
-    html += f"<td></td><td></td><td>{t}</td>"
-    html += "<td></td><td></td>"
-    html += f"<td>{city}</td>"
-    html += "<td></td><td></td><td></td><td></td><td></td>"
-html += "</tr>\n"
-
-#   b) PAKROVIMAS (bendri stulpeliai tušti)
-html += "<tr>"
-html += "<td></td>" * len(common_cols)
-for _ in dates:
-    t1 = f"{random.randint(8,9)}:00"
-    t2 = f"{random.randint(15,16)}:00"
-    city = random.choice(["Vilnius","Kaunas","Berlin"])
-    kms_t = random.randint(20,120)
-    kms_k = random.randint(400,900)
-    cost = round(kms_t*0.2,2)
-    fr = round(kms_k*random.uniform(1.0,2.0),2)
-    html += f"<td>9</td><td>6</td><td>{t1}</td><td>{t1}</td><td>{t2}</td>"
-    html += f"<td>{city}</td><td>Laura</td><td>{kms_t}</td><td>{kms_k}</td><td>{cost}</td><td>{fr}</td>"
-html += "</tr>\n"
-
-# 5) Antras vilkikas (analoginė struktūra)
-# Pakeisk common_cols reikšmes arba kopijuok aukščiau ir sukeisk reikšmes kaip nori
-common2 = [("1","3"),("Eksp. grupės nr.","1"),("XYZ789","Greta"),("","Jonas"),("","PRK009"),("","1"),("","45"),("","")]
-html += "<tr>"
-for _, val in common_cols: html += '<td rowspan="2"></td>'
-# ... generuok analogiškai ...
-html += "</tr>\n<tr></tr>\n"
+# ─── 5) Eilutės kiekvienam vilkikui ───────────────────────────────────────────
+for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
+    # IŠKROVIMAS (rowspan)
+    html += "<tr>"
+    for val in [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst]:
+        html += f'<td rowspan="2">{val}</td>'
+    for _ in dates:
+        t_arr = datetime.now().strftime("%H:%M")
+        city = random.choice(["Riga","Poznan","Klaipėda","Tallinn"])
+        html += (
+            "<td></td>"  # Bendras darbo laikas
+            "<td></td>"  # Likęs darbo laikas
+            f"<td>{t_arr}</td>"  # Atvykimo laikas
+            "<td></td><td></td>"  # Laikas nuo / iki tušti
+            f"<td>{city}</td>"
+            "<td></td><td></td><td></td><td></td><td></td>"
+        )
+    html += "</tr>\n"
+    # PAKROVIMAS
+    html += "<tr>"
+    html += "<td></td>" * len(common_headers)
+    for _ in dates:
+        t1 = f"{random.randint(7,9)}:00"
+        t2 = f"{random.randint(15,17)}:00"
+        cty = random.choice(["Vilnius","Kaunas","Berlin","Warsaw"])
+        km_t = random.randint(20,120)
+        km_k = random.randint(400,900)
+        cost = round(km_t*0.2,2)
+        fr = round(km_k*random.uniform(1.0,2.5),2)
+        html += (
+            f"<td>9</td><td>6</td>"
+            f"<td>{t1}</td><td>{t1}</td><td>{t2}</td>"
+            f"<td>{cty}</td><td>{tvad}</td>"
+            f"<td>{km_t}</td><td>{km_k}</td><td>{cost}</td><td>{fr}</td>"
+        )
+    html += "</tr>\n"
 
 html += "</table>"
 
-# 6) Rodome kaip HTML
+# ─── 6) Atvaizduojame ───────────────────────────────────────────────────────────
 st.markdown(html, unsafe_allow_html=True)
