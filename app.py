@@ -7,13 +7,13 @@ import hashlib
 st.set_page_config(layout="wide")
 st.title("DISPO – Planavimo lentelė su raidėmis, datų intervalu ir deterministiniu random")
 
-# 1) Lietuviškos savaitės dienos pilnu pavadinimu
+# 1) Lietuvos savaitės dienos
 lt_weekdays = {
     0: "Pirmadienis", 1: "Antradienis", 2: "Trečiadienis",
     3: "Ketvirtadienis", 4: "Penktadienis", 5: "Šeštadienis", 6: "Sekmadienis"
 }
 
-# 2) Excel raidė stulpeliui pagal jo numerį
+# 2) Excel raidė
 def col_letter(n: int) -> str:
     s = ""
     while n > 0:
@@ -21,53 +21,45 @@ def col_letter(n: int) -> str:
         s = chr(65 + r) + s
     return s
 
-# 3) Rasti tos savaitės pirmadienį
+# 3) Pirmadienio radimas
 def iso_monday(d: date) -> date:
     return d - timedelta(days=(d.isoweekday() - 1))
 
-# 4) Numatyti intervalo kraštai (−2 … +2 savaitės)
+# 4) Numatyti intervalai
 today = date.today()
 this_monday = iso_monday(today)
 start_default = this_monday - timedelta(weeks=2)
 end_default   = this_monday + timedelta(weeks=2, days=6)
 
-# 5) Atskiri laukai – pradžia ir pabaiga
-col1, col2 = st.columns(2)
-with col1:
-    start_sel = st.date_input(
-        "Pradžios data:",
-        value=start_default,
-        min_value=start_default - timedelta(weeks=4),
-        max_value=end_default + timedelta(weeks=4)
-    )
-with col2:
-    end_sel = st.date_input(
-        "Pabaigos data:",
-        value=end_default,
-        min_value=start_default - timedelta(weeks=4),
-        max_value=end_default + timedelta(weeks=4)
-    )
+# 5) Du date_input
+c1, c2 = st.columns(2)
+with c1:
+    start_sel = st.date_input("Pradžios data:", value=start_default,
+                              min_value=start_default - timedelta(weeks=4),
+                              max_value=end_default + timedelta(weeks=4))
+with c2:
+    end_sel = st.date_input("Pabaigos data:", value=end_default,
+                            min_value=start_default - timedelta(weeks=4),
+                            max_value=end_default + timedelta(weeks=4))
 
-# 6) Užtikrinti start ≤ end
+# 6) Užtikriname start ≤ end
 if end_sel < start_sel:
     start_date, end_date = end_sel, start_sel
 else:
     start_date, end_date = start_sel, end_sel
 
-# 7) Sąrašas dienų pasirinktom intervale
+# 7) dates sąrašas
 num_days = (end_date - start_date).days + 1
 dates = [start_date + timedelta(days=i) for i in range(num_days)]
 st.write(f"Rodyti {num_days} dienų nuo {start_date} iki {end_date}.")
 
-# 8) Bendri header’iai (įskaitant “Pastabos”)
+# 8) Header’iai
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
     "Trans. vadybininkas", "Priekabos nr.",
     "Vair. sk.", "Savaitinė atstova", "Pastabos"
 ]
-
-# 9) Dienos sub-header’iai
 day_headers = [
     "B. d. laikas", "L. d. laikas",
     "Atvykimo laikas", "Laikas nuo",
@@ -77,7 +69,7 @@ day_headers = [
     "Frachtas"
 ]
 
-# 10) Testiniai duomenys
+# 9) Sample data
 trucks_info = [
     ("1","2","ABC123","Tomas Mickus","Laura","PRK001",2,24),
     ("1","3","XYZ789","Greta Kairytė","Jonas","PRK009",1,45),
@@ -86,11 +78,12 @@ trucks_info = [
     ("2","5","JKL654","Jonas Petrauskas","Rasa","PRK321",2,24),
 ]
 
-# 11) Filtras pagal ekspeditorius
+#10) Filtras
 all_eksp = sorted({t[3] for t in trucks_info})
-sel_eksp = st.multiselect("Filtruok pagal ekspeditorius", options=all_eksp, default=all_eksp)
+sel_eksp = st.multiselect("Filtruok pagal ekspeditorius",
+                          options=all_eksp, default=all_eksp)
 
-# 12) CSS stilius – table nėra 100%, o inline-block + scroll
+#11) CSS
 st.markdown("""
 <style>
   .table-container { overflow-x: auto; }
@@ -113,35 +106,34 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 13) Deterministinis Random
+#12) Deterministinis random
 def get_rnd(truck: str, day: str) -> random.Random:
     seed = int(hashlib.md5(f"{truck}-{day}".encode()).hexdigest(), 16)
     return random.Random(seed)
 
-# 14) Skaičiuojam stulpelių skaičių
+#13) Stulpelių skaičiai
 total_common   = len(common_headers)
 total_day_cols = len(dates) * len(day_headers)
-total_all_cols = 1 + total_common + total_day_cols  # +1 už “#” stulpelį
+total_all_cols = 1 + total_common + total_day_cols  # +1 už ‘#’
 
-# 15) Generuojame HTML
+#14) Pradedam HTML
 html = '<div class="table-container"><table>\n'
 
-# 15.1) Raidžių eilutė
+#14.1) Raidės
 html += "<tr>"
 for i in range(1, total_all_cols+1):
     html += f"<th>{col_letter(i)}</th>"
 html += "</tr>\n"
 
-# 15.2) Datų eilutė: tuščias A stulpelis, tuščias blokas, tada kiekviena data + LT savaitės diena
-html += "<tr>"
-html += "<th></th>"
+#14.2) Datos + LT dienos
+html += "<tr><th></th>"
 html += f'<th colspan="{total_common}"></th>'
 for d in dates:
     wd = lt_weekdays[d.weekday()]
     html += f'<th colspan="{len(day_headers)}">{d:%Y-%m-%d} {wd}</th>'
 html += "</tr>\n"
 
-# 15.3) Faktiniai header’iai
+#14.3) Faktiniai header’iai
 html += "<tr><th>#</th>"
 for h in common_headers:
     html += f"<th>{h}</th>"
@@ -150,7 +142,7 @@ for _ in dates:
         html += f"<th>{hh}</th>"
 html += "</tr>\n"
 
-# 16) Pildome lentelės eilutes
+#15) Pildome rows
 row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     if eksp not in sel_eksp:
@@ -160,7 +152,7 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     html += f"<tr><td>{row_num}</td>"
     for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
         html += f'<td rowspan="2">{val}</td>'
-    html += "<td></td>"
+    html += "<td></td>"  # Pastabos
     for d in dates:
         key = d.strftime("%Y-%m-%d")
         rnd = get_rnd(truck, key)
@@ -175,7 +167,8 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
     # PAKROVIMAS
     html += f"<tr><td>{row_num+1}</td>"
-    html += "<td></td>" * (total_common + 1)
+    # tik tiek tuščių, kiek yra common_headers + Pastabos
+    html += "<td></td>" * total_common
     for d in dates:
         key   = d.strftime("%Y-%m-%d")
         rnd   = get_rnd(truck, key)
@@ -197,5 +190,5 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 html += "</table></div>"
 
-# 17) Atvaizdavimas
+#16) Render
 st.markdown(html, unsafe_allow_html=True)
