@@ -1,12 +1,11 @@
 import streamlit as st
-import pandas as pd
-import random
 from datetime import datetime, timedelta
+import random
 
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė su interaktyviu filtru „Ekspeditorius“")
+st.title("DISPO – Planavimo lentelė su merged cells ir ekspeditoriaus filtru")
 
-# ─── 1) Duomenų generavimas ────────────────────────────────────────────────────
+# 1) Apibrėžimai
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -24,6 +23,7 @@ day_headers = [
     "Frachtas"
 ]
 
+# 2) Vilkikų duomenys
 trucks_info = [
     ("1","2","ABC123","Tomas Mickus","Laura","PRK001",2,24),
     ("1","3","XYZ789","Greta Kairytė","Jonas","PRK009",1,45),
@@ -32,55 +32,76 @@ trucks_info = [
     ("2","5","JKL654","Jonas Petrauskas","Rasa","PRK321",2,24),
 ]
 
-rows = []
+# 3) Filtras pagal ekspeditorių
+all_eksp = sorted({t[3] for t in trucks_info})
+sel_eksp = st.multiselect("Filtruok pagal ekspeditorius", options=all_eksp, default=all_eksp)
+
+# 4) Paprasta CSS
+st.markdown("""
+<style>
+  table {border-collapse: collapse; width:100%; margin-top:10px;}
+  th, td {border:1px solid #ccc; padding:4px; text-align:center;}
+  th {background:#f5f5f5; position:sticky; top:0; z-index:1;}
+</style>
+""", unsafe_allow_html=True)
+
+# 5) Stulpelių sąrašas
+cols = common_headers + [""]  # dummy after "Savaitinė atstova"
+for d in dates:
+    cols += [f"{d} – {h}" for h in day_headers]
+
+# 6) HTML lentelė
+html = "<table>\n<tr><th></th>"
+for i in range(1, len(cols)+1):
+    html += f"<th>{i}</th>"
+html += "</tr>\n<tr><th>#</th>"
+for h in cols:
+    html += f"<th>{h}</th>"
+html += "</tr>\n"
+
+# 7) Pildome rows, tik pasirinkti ekspeditoriai
+row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
-    for phase in ["Iškrovimas", "Pakrovimas"]:
-        row = {h: "" for h in common_headers}
-        if phase == "Iškrovimas":
-            vals = [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst]
-            for h, v in zip(common_headers, vals):
-                row[h] = v
-        # pasilaukiam fazės rodymui
-        row["Fazė"] = phase
-        for d in dates:
-            for h in day_headers:
-                col = f"{d} – {h}"
-                if phase == "Iškrovimas":
-                    if h == "Atvykimo laikas":
-                        row[col] = datetime.now().strftime("%H:%M")
-                    elif h == "Vieta":
-                        row[col] = random.choice(["Vilnius","Kaunas"])
-                    else:
-                        row[col] = ""
-                else:
-                    if h == "B. darbo laikas":
-                        row[col] = random.randint(8,10)
-                    elif h == "L. darbo laikas":
-                        row[col] = random.randint(4,6)
-                    elif h == "Atvykimo laikas":
-                        row[col] = f"{random.randint(7,9)}:00"
-                    elif h == "Laikas nuo":
-                        row[col] = "08:00"
-                    elif h == "Laikas iki":
-                        row[col] = "16:00"
-                    elif h == "Vieta":
-                        row[col] = random.choice(["Poznan","Riga"])
-                    elif h == "Frachtas":
-                        row[col] = round(random.uniform(800,1200),2)
-                    else:
-                        row[col] = ""
-        rows.append(row)
+    if eksp not in sel_eksp:
+        continue
 
-df = pd.DataFrame(rows)
+    # IŠKROVIMAS
+    html += f"<tr><td>{row_num}</td>"
+    for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
+        html += f'<td rowspan="2">{val}</td>'
+    html += "<td></td>"
+    for d in dates:
+        t = datetime.now().strftime("%H:%M")
+        city = random.choice(["Vilnius","Kaunas","Berlin"])
+        html += (
+            "<td></td><td></td>"
+            f"<td>{t}</td>"
+            "<td></td><td></td>"
+            f"<td>{city}</td>"
+            "<td></td><td></td><td></td>"
+            "<td></td><td></td>"
+        )
+    html += "</tr>\n"
+    # PAKROVIMAS
+    html += f"<tr><td>{row_num+1}</td>"
+    html += "<td></td>"*(len(common_headers)+1)
+    for d in dates:
+        t1   = f"{random.randint(7,9)}:00"
+        kms  = random.randint(20,120)
+        fr   = round(random.uniform(800,1200),2)
+        html += (
+            "<td>9</td><td>6</td>"
+            f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
+            f"<td>{random.choice(['Riga','Poznan'])}</td>"
+            "<td></td>"
+            f"<td>{kms}</td><td>{kms*5}</td>"
+            "<td></td>"
+            f"<td>{fr}</td>"
+        )
+    html += "</tr>\n"
+    row_num += 2
 
-# ─── 2) Filtras „Ekspeditorius“ ───────────────────────────────────────────────
-eksp_list = sorted(set(df["Ekspeditorius"]))
-selected_eksp = st.multiselect(
-    "Filtruok pagal ekspeditorių",
-    options=eksp_list,
-    default=eksp_list
-)
-filtered_df = df[df["Ekspeditorius"].isin(selected_eksp)]
+html += "</table>"
 
-# ─── 3) Lentelės atvaizdavimas ────────────────────────────────────────────────
-st.dataframe(filtered_df, use_container_width=True)
+# 8) Atvaizdavimas
+st.markdown(html, unsafe_allow_html=True)
