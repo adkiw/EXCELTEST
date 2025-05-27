@@ -3,9 +3,9 @@ from datetime import datetime, timedelta
 import random
 
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė (HTML su rowspan, 5 vilkikai)")
+st.title("DISPO – Planavimo lentelė su filtrais ir atskyrimais")
 
-# ─── 1) Bendri ir dienų stulpeliai ────────────────────────────────────────────
+# ─── 1) Bendri ir dienų antraštės ────────────────────────────────────────────
 common_headers = [
     "Transporto grupė",
     "Ekspedicijos grupės nr.",
@@ -30,12 +30,11 @@ day_headers = [
     "Frachtas (EUR)"
 ]
 
-# ─── 2) Datos (10 d.) horizontaliai ────────────────────────────────────────────
+# ─── 2) Datos ─────────────────────────────────────────────────────────────────
 start = datetime.today().date()
 dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 
 # ─── 3) Pavyzdiniai 5 vilkikai ────────────────────────────────────────────────
-# kiekvienas įrašas: (tr_grp, exp_grp, truck_nr, eksp, tvad, prk, v_sk, atst)
 trucks_info = [
     ("1","2","ABC123","Tomas Mickus",   "Laura Juknevičienė","PRK001",2,24),
     ("1","3","XYZ789","Greta Kairytė",  "Jonas Petrauskas",  "PRK009",1,45),
@@ -44,31 +43,52 @@ trucks_info = [
     ("2","5","JKL654","Jonas Petrauskas","Rasa Mikalausk.","PRK321",2,24),
 ]
 
-# ─── 4) Kuriame HTML ───────────────────────────────────────────────────────────
+# ─── 4) Filtrai ───────────────────────────────────────────────────────────────
+all_trucks = [t[2] for t in trucks_info]
+sel_trucks = st.multiselect("🛻 Pasirink vilkikus", options=all_trucks, default=all_trucks)
+
+all_dates = dates.copy()
+sel_dates = st.multiselect("📅 Pasirink datas", options=all_dates, default=all_dates)
+
+# ─── 5) Pradedame HTML lentelę ────────────────────────────────────────────────
 html = """
 <style>
   table {border-collapse: collapse; width: 100%;}
   th, td {border: 1px solid #ddd; padding: 4px; text-align: center;}
-  th {background: #f0f0f0;}
+  th {background: #f0f0f0; position: sticky; top: 0; z-index: 1;}
+  .truck-divider td {border-top: 3px solid #444 !important;}
+  .date-divider th {border-left: 3px solid #0073e6 !important;}
 </style>
 <table>
   <tr>
 """
-# antraštės
+# bendros antraštės
 for h in common_headers:
     html += f"<th>{h}</th>"
-for d in dates:
+
+# dienų antraštės tik užfiltruotoms datoms
+for d in sel_dates:
     for dh in day_headers:
-        html += f"<th>{d}<br>– {dh}</th>"
+        html += f'<th class="date-divider">{d}<br>– {dh}</th>'
 html += "</tr>\n"
 
-# ─── 5) Eilutės kiekvienam vilkikui ───────────────────────────────────────────
+# ─── 6) Pildome eilutes su rowSpan ir atskyrimais ────────────────────────────
+first = True
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
-    # IŠKROVIMAS (rowspan)
-    html += "<tr>"
+    if truck not in sel_trucks:
+        continue
+
+    # CSS klasė, kad prieš kiekvieną vilkiko grupę būtų storesnė juosta
+    divider_cls = "truck-divider" if not first else ""
+    first = False
+
+    #  a) IŠKROVIMAS
+    html += f'<tr class="{divider_cls}">'
+    # suliejame bendrus stulpelius per dvi eilutes
     for val in [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst]:
         html += f'<td rowspan="2">{val}</td>'
-    for _ in dates:
+    # operacijos duomenys
+    for d in sel_dates:
         t_arr = datetime.now().strftime("%H:%M")
         city = random.choice(["Riga","Poznan","Klaipėda","Tallinn"])
         html += (
@@ -80,10 +100,11 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
             "<td></td><td></td><td></td><td></td><td></td>"
         )
     html += "</tr>\n"
-    # PAKROVIMAS
-    html += "<tr>"
+
+    #  b) PAKROVIMAS
+    html += f'<tr class="{divider_cls}">'
     html += "<td></td>" * len(common_headers)
-    for _ in dates:
+    for d in sel_dates:
         t1 = f"{random.randint(7,9)}:00"
         t2 = f"{random.randint(15,17)}:00"
         cty = random.choice(["Vilnius","Kaunas","Berlin","Warsaw"])
@@ -101,5 +122,5 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 html += "</table>"
 
-# ─── 6) Atvaizduojame ───────────────────────────────────────────────────────────
+# ─── 7) Atvaizduojame HTML ───────────────────────────────────────────────────
 st.markdown(html, unsafe_allow_html=True)
