@@ -18,19 +18,21 @@ start_default = this_monday - timedelta(weeks=2)
 end_default   = this_monday + timedelta(weeks=2, days=6)
 
 # 3) Streamlit datos intervalo pasirinkimas
-start_sel, end_sel = st.date_input(
+date_range = st.date_input(
     "Pasirinkite datų intervalą:",
     value=(start_default, end_default),
     min_value=start_default - timedelta(weeks=4),
     max_value=end_default + timedelta(weeks=4)
 )
 
-# 4) Atskiriame datas ir generuojame sąrašą
-if isinstance(start_sel, tuple):
-    start_date, end_date = start_sel
+# 4) Išskaidome start_date ir end_date
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    start_date, end_date = date_range
 else:
-    start_date = end_date = start_sel
+    # jei pasirinko vieną datą
+    start_date = end_date = date_range
 
+# 5) Sugeneruojame dates sąrašą
 num_days = (end_date - start_date).days + 1
 dates = [
     (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
@@ -39,7 +41,7 @@ dates = [
 
 st.write(f"Rodyti {num_days} dienų nuo {start_date} iki {end_date}.")
 
-# 5) Bendri header’iai (įskaitant “Pastabos”)
+# 6) Bendri header’iai (įskaitant “Pastabos”)
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -47,7 +49,7 @@ common_headers = [
     "Vair. sk.", "Savaitinė atstova", "Pastabos"
 ]
 
-# 6) Dienos sub-header’iai
+# 7) Dienos sub-header’iai
 day_headers = [
     "B. d. laikas", "L. d. laikas",
     "Atvykimo laikas", "Laikas nuo",
@@ -57,7 +59,7 @@ day_headers = [
     "Frachtas"
 ]
 
-# 7) Testiniai duomenys apie vilkikus ir ekspeditorius
+# 8) Testiniai duomenys apie vilkikus ir ekspeditorius
 trucks_info = [
     ("1", "2", "ABC123", "Tomas Mickus",     "Laura", "PRK001", 2, 24),
     ("1", "3", "XYZ789", "Greta Kairytė",    "Jonas", "PRK009", 1, 45),
@@ -66,7 +68,7 @@ trucks_info = [
     ("2", "5", "JKL654", "Jonas Petrauskas", "Rasa",  "PRK321", 2, 24),
 ]
 
-# 8) Filtras pagal ekspeditorių vardus
+# 9) Filtras pagal ekspeditorių vardus
 all_eksp = sorted({t[3] for t in trucks_info})
 sel_eksp = st.multiselect(
     "Filtruok pagal ekspeditorius",
@@ -74,7 +76,7 @@ sel_eksp = st.multiselect(
     default=all_eksp
 )
 
-# 9) CSS stilius lentelės marginimui
+# 10) CSS stilius lentelės atvaizdavimui
 st.markdown("""
 <style>
   table {border-collapse: collapse; width:100%; margin-top:10px;}
@@ -83,33 +85,33 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 10) Funkcija deterministiniam Random (kad filtravimas nekeistų skaičių)
+# 11) Funkcija deterministiniam Random (kad filtravimas nekeistų skaičių)
 def get_rnd(truck: str, day: str) -> random.Random:
     seed = int(hashlib.md5(f"{truck}-{day}".encode()).hexdigest(), 16)
     return random.Random(seed)
 
-# 11) Skaičiuojame bendrą stulpelių skaičių
+# 12) Apskaičiuojame stulpelių skaičių
 total_common = len(common_headers)            # 9
 total_day_cols = len(dates) * len(day_headers)
 total_cols = total_common + total_day_cols   # viso
 
-# 12) Pradedame kurti lentelės HTML
+# 13) Pradedame kurti lentelės HTML
 html = "<table>\n"
 
-# 12.1) Pirmoji eilutė: numeracija
+# 13.1) Pirmoji eilutė: numeracija
 html += "<tr><th></th>"
 for i in range(1, total_cols + 1):
     html += f"<th>{i}</th>"
 html += "</tr>\n"
 
-# 12.2) Antroji eilutė: tuščias blokas virš “common+Pastabos” + datos
+# 13.2) Antroji eilutė: tuščias blokas virš “common+Pastabos” + datos
 html += "<tr><th></th>"
 html += f'<th colspan="{total_common}"></th>'
 for d in dates:
     html += f'<th colspan="{len(day_headers)}">{d}</th>'
 html += "</tr>\n"
 
-# 12.3) Trečioji eilutė: faktiniai header’iai be datos prefikso
+# 13.3) Trečioji eilutė: faktiniai header’iai
 html += "<tr><th>#</th>"
 for h in common_headers:
     html += f"<th>{h}</th>"
@@ -118,13 +120,13 @@ for _ in dates:
         html += f"<th>{hh}</th>"
 html += "</tr>\n"
 
-# 13) Užpildome lentelės eilutes
+# 14) Pildome lentelės eilutes
 row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     if eksp not in sel_eksp:
         continue
 
-    # 13.1) IŠKROVIMAS (pirmoji eilutė)
+    # 14.1) IŠKROVIMAS
     html += f"<tr><td>{row_num}</td>"
     for val in (tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst):
         html += f'<td rowspan="2">{val}</td>'
@@ -142,7 +144,7 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
         )
     html += "</tr>\n"
 
-    # 13.2) PAKROVIMAS (antroji eilutė)
+    # 14.2) PAKROVIMAS
     html += f"<tr><td>{row_num+1}</td>"
     html += "<td></td>" * total_common
     for d in dates:
@@ -166,5 +168,5 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 html += "</table>"
 
-# 14) Atvaizdavimas
+# 15) Atvaizdavimas
 st.markdown(html, unsafe_allow_html=True)
