@@ -2,12 +2,11 @@ import streamlit as st
 import pandas as pd
 import random
 from datetime import datetime, timedelta
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė su Excel-stiliaus filtru ant 'Ekspeditorius'")
+st.title("DISPO – Planavimo lentelė su interaktyviu filtru „Ekspeditorius“")
 
-# 1) Bendri ir dienų stulpeliai
+# ─── 1) Duomenų generavimas ────────────────────────────────────────────────────
 common_headers = [
     "Transporto grupė", "Ekspedicijos grupės nr.",
     "Vilkiko nr.", "Ekspeditorius",
@@ -19,13 +18,12 @@ dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 day_headers = [
     "B. darbo laikas", "L. darbo laikas",
     "Atvykimo laikas", "Laikas nuo",
-    "Laikas iki", "Vieta",
-    "Atsakingas", "Tušti km",
-    "Krauti km", "Kelių išlaidos",
+    "Laikas iki",       "Vieta",
+    "Atsakingas",      "Tušti km",
+    "Krauti km",       "Kelių išlaidos",
     "Frachtas"
 ]
 
-# 2) Pavyzdiniai vilkikai
 trucks_info = [
     ("1","2","ABC123","Tomas Mickus","Laura","PRK001",2,24),
     ("1","3","XYZ789","Greta Kairytė","Jonas","PRK009",1,45),
@@ -34,21 +32,16 @@ trucks_info = [
     ("2","5","JKL654","Jonas Petrauskas","Rasa","PRK321",2,24),
 ]
 
-# 3) Surenkame duomenis DataFrame formatui
 rows = []
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
     for phase in ["Iškrovimas", "Pakrovimas"]:
-        row = {
-            "Transporto grupė": tr_grp,
-            "Ekspedicijos grupės nr.": exp_grp,
-            "Vilkiko nr.": truck,
-            "Ekspeditorius": eksp,
-            "Trans. vadybininkas": tvad,
-            "Priekabos nr.": prk,
-            "Vair. sk.": v_sk,
-            "Savaitinė atstova": atst,
-            "Fazė": phase
-        }
+        row = {h: "" for h in common_headers}
+        if phase == "Iškrovimas":
+            vals = [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst]
+            for h, v in zip(common_headers, vals):
+                row[h] = v
+        # pasilaukiam fazės rodymui
+        row["Fazė"] = phase
         for d in dates:
             for h in day_headers:
                 col = f"{d} – {h}"
@@ -80,29 +73,14 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 df = pd.DataFrame(rows)
 
-# 4) Konfigūruojame AgGrid su filtru „Ekspeditorius“
-gb = GridOptionsBuilder.from_dataframe(df)
-# Įjungiame bendrus filtrus visiems stulpeliams (Excel stilius)
-gb.configure_default_column(
-    filter="agMultiColumnFilter",
-    floatingFilter=True,
-    sortable=True,
-    resizable=True
+# ─── 2) Filtras „Ekspeditorius“ ───────────────────────────────────────────────
+eksp_list = sorted(set(df["Ekspeditorius"]))
+selected_eksp = st.multiselect(
+    "Filtruok pagal ekspeditorių",
+    options=eksp_list,
+    default=eksp_list
 )
-# Papildomai užtikriname, kad 'Ekspeditorius' turėtų teksto filtro dropdown
-gb.configure_column(
-    "Ekspeditorius",
-    filter="agSetColumnFilter",
-    sortable=True,
-    floatingFilter=True
-)
-grid_options = gb.build()
+filtered_df = df[df["Ekspeditorius"].isin(selected_eksp)]
 
-# 5) Atvaizduojame interaktyvią lentelę
-AgGrid(
-    df,
-    gridOptions=grid_options,
-    enable_enterprise_modules=False,
-    fit_columns_on_grid_load=True,
-    theme="streamlit"
-)
+# ─── 3) Lentelės atvaizdavimas ────────────────────────────────────────────────
+st.dataframe(filtered_df, use_container_width=True)
