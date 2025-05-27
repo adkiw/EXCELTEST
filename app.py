@@ -1,58 +1,55 @@
 import streamlit as st
 from datetime import datetime, timedelta
-import random, hashlib
+import random
+import hashlib  # jei naudosite deterministinį seed’ą
 
-# … (ankstesnės definicijos) …
+st.set_page_config(layout="wide")
+st.title("DISPO – Planavimo lentelė su merged cells ir ekspeditoriaus filtru")
 
-# Prieš lentelės braižymą:
-def get_rnd(truck: str, day: str):
-    # hash -> 128 bit, pavertiam į int
-    seed = int(hashlib.md5(f"{truck}-{day}".encode()).hexdigest(), 16)
-    return random.Random(seed)
+# 1) Bendri header’iai
+common_headers = [
+    "Transporto grupė", "Ekspedicijos grupės nr.",
+    "Vilkiko nr.", "Ekspeditorius",
+    "Trans. vadybininkas", "Priekabos nr.",
+    "Vair. sk.", "Savaitinė atstova",
+    "Pastabos"   # 9-asis stulpelis
+]
 
-# … st.set_page_config, CSS, filtras … 
+# 2) Datos – per 10 dienų nuo šiandien
+start = datetime.today().date()
+dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 
-# Braižom lentelę
+# 3) Dienos sub-header’iai
+day_headers = [
+    "B. darbo laikas", "L. darbo laikas", "Atvykimo laikas",
+    "Laikas nuo",       "Laikas iki",       "Vieta",
+    "Atsakingas",       "Tušti km",         "Krauti km",
+    "Kelių išlaidos",   "Frachtas"
+]
+
+# 4) **TRUCKS_INFO turi būti čia, **prieš** for-ciklą!**
+trucks_info = [
+    ("1", "2", "ABC123", "Tomas Mickus",     "Laura", "PRK001", 2, 24),
+    ("1", "3", "XYZ789", "Greta Kairytė",    "Jonas", "PRK009", 1, 45),
+    ("2", "1", "DEF456", "Rasa Mikalausk.",  "Tomas", "PRK123", 2, 24),
+    ("3", "4", "GHI321", "Laura Juknevič.",  "Greta", "PRK555", 1, 45),
+    ("2", "5", "JKL654", "Jonas Petrauskas", "Rasa",  "PRK321", 2, 24),
+]
+
+# 5) Filtras pagal ekspeditorius
+all_eksp = sorted({t[3] for t in trucks_info})
+sel_eksp = st.multiselect("Filtruok pagal ekspeditorius", options=all_eksp, default=all_eksp)
+
+# 6) CSS stilius
+st.markdown("""<style>…</style>""", unsafe_allow_html=True)
+
+# 7) Sudarome cols sąrašą
+cols = common_headers[:]  # dabar jau įskaičiuota “Pastabos”
+for d in dates:
+    cols += day_headers
+
+# 8) Čia jau “for … in trucks_info” – kintamasis egzistuoja ir klaidos nebėra
+html = "<table>…"
+row_num = 1
 for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
-    if eksp not in sel_eksp: continue
-
-    # IŠKROVIMAS
-    html += f"<tr><td>{row_num}</td>"
-    # … rowspan bendri duomenys …
-    html += "<td></td>"  # Pastabos
-    for d in dates:
-        rnd = get_rnd(truck, d)
-        # generuojam
-        t_h = rnd.randint(7,23)
-        t_m = rnd.randint(0,59)
-        atvykimo = f"{t_h:02d}:{t_m:02d}"
-        city = rnd.choice(["Vilnius","Kaunas","Berlin"])
-        # atvaizdavimui:
-        html += (
-            "<td></td><td></td>"
-            f"<td>{atvykimo}</td>"
-            "<td></td><td></td>"
-            f"<td>{city}</td>"
-            # … likę td …
-        )
-    html += "</tr>\n"
-
-    # PAKROVIMAS
-    html += f"<tr><td>{row_num+1}</td>"
-    html += "<td></td>" * total_common
-    for d in dates:
-        rnd = get_rnd(truck, d)
-        t1   = f"{rnd.randint(7,9)}:02d:00"
-        kms  = rnd.randint(20,120)
-        fr   = round(rnd.uniform(800,1200),2)
-        html += (
-            "<td>9</td><td>6</td>"
-            f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
-            f"<td>{rnd.choice(['Riga','Poznan'])}</td>"
-            "<td></td>"
-            f"<td>{kms}</td><td>{kms*5}</td>"
-            "<td></td>"
-            f"<td>{fr}</td>"
-        )
-    html += "</tr>\n"
-    row_num += 2
+    # …
