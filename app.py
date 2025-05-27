@@ -1,84 +1,94 @@
 import streamlit as st
-import pandas as pd
-import random
 from datetime import datetime, timedelta
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+import random
 
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė su rowSpan")
 
-# ─── Sukuriame pavyzdinę lentelę ─────────────────────────────────────────────
-# Bendri stulpeliai
-common = ["Transporto grupė", "Ekspedicijos grupės nr.", "Vilkiko nr.", "Ekspeditorius"]
+st.title("DISPO – Planavimo lentelė (HTML su rowspan)")
 
-# Dienos stulpeliai (viena data, kad iliustruoti)
-day_cols = ["Bendras darbo laikas", "Atvykimo laikas", "Laikas nuo", "Laikas iki", "Vieta"]
+# 1) Apibrėžiame bendrus laukus ir dienų laukus
+common_cols = [
+    ("Transporto grupė", "1"), 
+    ("Ekspedicijos grupės nr.", "2"),
+    ("Vilkiko nr.", "ABC123"),
+    ("Ekspeditorius", "Tomas Mickus"),
+    ("Trans. vadybininkas", "Laura Juknevičienė"),
+    ("Priekabos nr.", "PRK001"),
+    ("Vair. sk.", "2"),
+    ("Savaitinė atstova", "24")
+]
 
-# Sukuriam dvi “vilkiko” grupes po dvi eilutes
-rows = []
-for grp, exp_grp, truck, exp in [
-    ("1", "2", "ABC123", "Tomas Mickus"),
-    ("3", "1", "XYZ789", "Greta Kairytė")
-]:
-    # Iškrovimas (pirmoji eilutė)
-    rows.append({
-        **{"Transporto grupė": grp, "Ekspedicijos grupės nr.": exp_grp,
-           "Vilkiko nr.": truck, "Ekspeditorius": exp},
-        **{col: (datetime.now().strftime("%H:%M") if col in ["Atvykimo laikas","Laikas nuo"] else "") for col in day_cols},
-        "_isFirst": True
-    })
-    # Pakrovimas (antroji)
-    rows.append({
-        **{"Transporto grupė": grp, "Ekspedicijos grupės nr.": exp_grp,
-           "Vilkiko nr.": truck, "Ekspeditorius": exp},
-        **{col: (f"{random.randint(8,9)}:00" if col=="Laikas nuo"
-                else f"{random.randint(15,16)}:00" if col=="Laikas iki"
-                else random.choice(["Vilnius","Kaunas"]) if col=="Vieta"
-                else random.randint(8,9) if col=="Bendras darbo laikas"
-                else "") for col in day_cols},
-        "_isFirst": False
-    })
+day_cols = [
+    "Bendras darbo laikas", "Likęs darbo laikas atvykus",
+    "Atvykimo laikas", "Laikas nuo", "Laikas iki",
+    "Vieta", "Atsakingas", "Tušti km", "Krauti km",
+    "Kelių išlaidos (EUR)", "Frachtas (EUR)"
+]
 
-df = pd.DataFrame(rows)
+# 2) Sukuriame 10 datų horizontaliai
+start = datetime.today().date()
+dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
 
-# ─── Paruošiame AgGrid su rowSpan ────────────────────────────────────────────
-gb = GridOptionsBuilder.from_dataframe(df)
+# 3) Pradedame statyti HTML lentelę
+html = """
+<style>
+  table {border-collapse: collapse; width: 100%;}
+  th, td {border: 1px solid #ddd; padding: 4px; text-align: center;}
+  th {background: #f0f0f0;}
+</style>
+<table>
+  <tr>
+    <!-- headerai -->
+    <th>Transporto grupė</th><th>Ekspedicijos grupės nr.</th>
+    <th>Vilkiko nr.</th><th>Ekspeditorius</th><th>Trans. vadybininkas</th>
+    <th>Priekabos nr.</th><th>Vair. sk.</th><th>Savaitinė atstova</th>
+"""
+# pridėti kiekvienos dienos dienų antraštės
+for d in dates:
+    for dc in day_cols:
+        html += f"<th>{d}<br>– {dc}</th>"
+html += "</tr>\n"
 
-# JS funkcija, kuri grąžina 2 (rowSpan) tik pirmai eilutei (_isFirst=True)
-js_row_span = JsCode("""
-function(params) {
-    return params.data._isFirst ? 2 : 0;
-}
-""")
+# 4) Pirmas vilkikas: dvi eilutės
+#   a) IŠKROVIMAS (bendri stulpeliai rowspan=2)
+html += "<tr>"
+for name, val in common_cols:
+    html += f'<td rowspan="2">{val}</td>'
+# Iškrovimo stulpeliai – tik laikas/vieta
+for _ in dates:
+    t = datetime.now().strftime("%H:%M")
+    city = random.choice(["Riga", "Poznan", "Klaipėda"])
+    # įrašome laikas atvykimo/Tušti kiti laukai tušti
+    html += f"<td></td><td></td><td>{t}</td>"
+    html += "<td></td><td></td>"
+    html += f"<td>{city}</td>"
+    html += "<td></td><td></td><td></td><td></td><td></td>"
+html += "</tr>\n"
 
-# Pridėsim rowSpan tik pirmajam bendro stulpelio stulpeliui “Transporto grupė”
-gb.configure_column(
-    "Transporto grupė",
-    rowSpan=js_row_span,
-    autoHeight=True
-)
-# Užtikslinkime, kad ir “Ekspedicijos grupės nr.” taip pat turi rowSpan
-gb.configure_column(
-    "Ekspedicijos grupės nr.",
-    rowSpan=js_row_span,
-    autoHeight=True
-)
+#   b) PAKROVIMAS (bendri stulpeliai tušti)
+html += "<tr>"
+html += "<td></td>" * len(common_cols)
+for _ in dates:
+    t1 = f"{random.randint(8,9)}:00"
+    t2 = f"{random.randint(15,16)}:00"
+    city = random.choice(["Vilnius","Kaunas","Berlin"])
+    kms_t = random.randint(20,120)
+    kms_k = random.randint(400,900)
+    cost = round(kms_t*0.2,2)
+    fr = round(kms_k*random.uniform(1.0,2.0),2)
+    html += f"<td>9</td><td>6</td><td>{t1}</td><td>{t1}</td><td>{t2}</td>"
+    html += f"<td>{city}</td><td>Laura</td><td>{kms_t}</td><td>{kms_k}</td><td>{cost}</td><td>{fr}</td>"
+html += "</tr>\n"
 
-# Kiti bendri stulpeliai be rowSpan
-for col in ["Vilkiko nr.", "Ekspeditorius"]:
-    gb.configure_column(col, rowSpan=js_row_span, autoHeight=True)
+# 5) Antras vilkikas (analoginė struktūra)
+# Pakeisk common_cols reikšmes arba kopijuok aukščiau ir sukeisk reikšmes kaip nori
+common2 = [("1","3"),("Eksp. grupės nr.","1"),("XYZ789","Greta"),("","Jonas"),("","PRK009"),("","1"),("","45"),("","")]
+html += "<tr>"
+for _, val in common_cols: html += '<td rowspan="2"></td>'
+# ... generuok analogiškai ...
+html += "</tr>\n<tr></tr>\n"
 
-# Dienos stulpeliai be rowSpan
-for col in day_cols:
-    gb.configure_column(col)
+html += "</table>"
 
-grid_opts = gb.build()
-
-# ─── Rodome lentelę ─────────────────────────────────────────────────────────
-AgGrid(
-    df,
-    gridOptions=grid_opts,
-    enable_enterprise_modules=False,
-    fit_columns_on_grid_load=True,
-    theme="streamlit"  # ar "balham"
-)
+# 6) Rodome kaip HTML
+st.markdown(html, unsafe_allow_html=True)
