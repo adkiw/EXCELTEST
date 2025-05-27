@@ -116,4 +116,5 @@ for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
 
 html += "</table>"
 
-# 8) 
+# 8) Atvaizduojame lentelę
+st.markdown(html, unsafe_allow_html=True)  
