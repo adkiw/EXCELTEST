@@ -1,126 +1,103 @@
 import streamlit as st
-from datetime import datetime, timedelta
+import pandas as pd
 import random
+from datetime import datetime, timedelta
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 st.set_page_config(layout="wide")
-st.title("DISPO – Planavimo lentelė su filtrais ir atskyrimais")
+st.title("DISPO – su Excel-stiliaus filtrais ir separatoriais")
 
-# ─── 1) Bendri ir dienų antraštės ────────────────────────────────────────────
-common_headers = [
-    "Transporto grupė",
-    "Ekspedicijos grupės nr.",
-    "Vilkiko nr.",
-    "Ekspeditorius",
-    "Trans. vadybininkas",
-    "Priekabos nr.",
-    "Vair. sk.",
-    "Savaitinė atstova"
-]
-day_headers = [
-    "Bendras darbo laikas",
-    "Likęs darbo laikas atvykus",
-    "Atvykimo laikas",
-    "Laikas nuo",
-    "Laikas iki",
-    "Vieta",
-    "Atsakingas",
-    "Tušti km",
-    "Krauti km",
-    "Kelių išlaidos (EUR)",
-    "Frachtas (EUR)"
-]
+# ─── 1) Sukuriame pavyzdinius duomenis ────────────────────────────────────────
+# bendri stulpeliai ir kelios dienos
+common_cols = ["Transporto grupė", "Ekspedicijos grupės nr.", "Vilkiko nr.", "Ekspeditorius"]
+dates = [(datetime.today().date() + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(5)]
+day_cols = ["B. darbo laikas", "L. darbo laikas", "Atvyk.", "Nuo", "Iki", "Vieta"]
 
-# ─── 2) Datos ─────────────────────────────────────────────────────────────────
-start = datetime.today().date()
-dates = [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(10)]
+# build DataFrame
+rows = []
+for tr_grp, exp_grp, truck, exp in [
+    ("1","2","ABC123","Tomas Mickus"),
+    ("3","1","XYZ789","Greta Kairytė"),
+]:
+    # iškrovimas
+    rec = {"Transporto grupė":tr_grp, "Ekspedicijos grupės nr.":exp_grp,
+           "Vilkiko nr.":truck, "Ekspeditorius":exp}
+    rec["_isFirst"] = True
+    for d in dates:
+        rec[f"{d} – Atvyk."] = datetime.now().strftime("%H:%M")
+        rec[f"{d} – Vieta"]  = random.choice(["Vilnius","Kaunas"])
+    rows.append(rec)
+    # pakrovimas
+    rec2 = {c:"" for c in common_cols}
+    rec2["_isFirst"] = False
+    for d in dates:
+        rec2[f"{d} – B. darbo laikas"] = random.randint(8,10)
+        rec2[f"{d} – L. darbo laikas"] = random.randint(4,6)
+        rec2[f"{d} – Atvyk."] = f"{random.randint(8,9)}:00"
+        rec2[f"{d} – Nuo"]  = "08:00"
+        rec2[f"{d} – Iki"]  = "16:00"
+        rec2[f"{d} – Vieta"]  = random.choice(["Poznan","Riga"])
+    rows.append(rec2)
 
-# ─── 3) Pavyzdiniai 5 vilkikai ────────────────────────────────────────────────
-trucks_info = [
-    ("1","2","ABC123","Tomas Mickus",   "Laura Juknevičienė","PRK001",2,24),
-    ("1","3","XYZ789","Greta Kairytė",  "Jonas Petrauskas",  "PRK009",1,45),
-    ("2","1","DEF456","Rasa Mikalausk.","Tomas Mickus",     "PRK123",2,24),
-    ("3","4","GHI321","Laura Juknevič.","Greta Kairytė",     "PRK555",1,45),
-    ("2","5","JKL654","Jonas Petrauskas","Rasa Mikalausk.","PRK321",2,24),
-]
+df = pd.DataFrame(rows)
 
-# ─── 4) Filtrai ───────────────────────────────────────────────────────────────
-all_trucks = [t[2] for t in trucks_info]
-sel_trucks = st.multiselect("🛻 Pasirink vilkikus", options=all_trucks, default=all_trucks)
+# ─── 2) Paruošiame AgGrid su filtrais, rowspan ir separatoriais ───────────────
+gb = GridOptionsBuilder.from_dataframe(df)
 
-all_dates = dates.copy()
-sel_dates = st.multiselect("📅 Pasirink datas", options=all_dates, default=all_dates)
+# auto filtras Excel stiliumi
+gb.configure_default_column(
+    filter="agMultiColumnFilter",
+    sortable=True,
+    floatingFilter=True,
+    resizable=True
+)
 
-# ─── 5) Pradedame HTML lentelę ────────────────────────────────────────────────
-html = """
+# rowspan funk
+js_row_span = JsCode("""
+function(params) {
+  return params.data._isFirst ? 2 : 0;
+}
+""")
+for c in common_cols:
+    gb.configure_column(c, rowSpan=js_row_span, autoHeight=True)
+
+# stulpelių separatorius – vertikali linija prieš kiekvieną datos grupę
+col_defs = gb.build()["columnDefs"]
+new_defs = []
+for cd in col_defs:
+    field = cd.get("field","")
+    # kiekvieną datą – jeigu laukas su " – " (data – X), tada kairinė linija
+    if " – " in field:
+        cd.setdefault("cellStyle", {})["borderLeft"] = "3px solid #0073e6"
+    new_defs.append(cd)
+gb._grid_options["columnDefs"] = new_defs
+
+# eilutės separatorius – horizontali linija prieš antrą vilkiką
+gb.configure_grid_options(
+    getRowClass=JsCode("""
+function(params) {
+  return !params.data._isFirst ? 'truck-divider' : '';
+}
+""")
+)
+
+# pridėjam CSS klasę
+grid_css = """
 <style>
-  table {border-collapse: collapse; width: 100%;}
-  th, td {border: 1px solid #ddd; padding: 4px; text-align: center;}
-  th {background: #f0f0f0; position: sticky; top: 0; z-index: 1;}
-  .truck-divider td {border-top: 3px solid #444 !important;}
-  .date-divider th {border-left: 3px solid #0073e6 !important;}
+    .truck-divider .ag-cell {
+        border-top: 3px solid #444 !important;
+    }
 </style>
-<table>
-  <tr>
 """
-# bendros antraštės
-for h in common_headers:
-    html += f"<th>{h}</th>"
+st.markdown(grid_css, unsafe_allow_html=True)
 
-# dienų antraštės tik užfiltruotoms datoms
-for d in sel_dates:
-    for dh in day_headers:
-        html += f'<th class="date-divider">{d}<br>– {dh}</th>'
-html += "</tr>\n"
+grid_options = gb.build()
 
-# ─── 6) Pildome eilutes su rowSpan ir atskyrimais ────────────────────────────
-first = True
-for tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst in trucks_info:
-    if truck not in sel_trucks:
-        continue
-
-    # CSS klasė, kad prieš kiekvieną vilkiko grupę būtų storesnė juosta
-    divider_cls = "truck-divider" if not first else ""
-    first = False
-
-    #  a) IŠKROVIMAS
-    html += f'<tr class="{divider_cls}">'
-    # suliejame bendrus stulpelius per dvi eilutes
-    for val in [tr_grp, exp_grp, truck, eksp, tvad, prk, v_sk, atst]:
-        html += f'<td rowspan="2">{val}</td>'
-    # operacijos duomenys
-    for d in sel_dates:
-        t_arr = datetime.now().strftime("%H:%M")
-        city = random.choice(["Riga","Poznan","Klaipėda","Tallinn"])
-        html += (
-            "<td></td>"  # Bendras darbo laikas
-            "<td></td>"  # Likęs darbo laikas
-            f"<td>{t_arr}</td>"  # Atvykimo laikas
-            "<td></td><td></td>"  # Laikas nuo / iki tušti
-            f"<td>{city}</td>"
-            "<td></td><td></td><td></td><td></td><td></td>"
-        )
-    html += "</tr>\n"
-
-    #  b) PAKROVIMAS
-    html += f'<tr class="{divider_cls}">'
-    html += "<td></td>" * len(common_headers)
-    for d in sel_dates:
-        t1 = f"{random.randint(7,9)}:00"
-        t2 = f"{random.randint(15,17)}:00"
-        cty = random.choice(["Vilnius","Kaunas","Berlin","Warsaw"])
-        km_t = random.randint(20,120)
-        km_k = random.randint(400,900)
-        cost = round(km_t*0.2,2)
-        fr = round(km_k*random.uniform(1.0,2.5),2)
-        html += (
-            f"<td>9</td><td>6</td>"
-            f"<td>{t1}</td><td>{t1}</td><td>{t2}</td>"
-            f"<td>{cty}</td><td>{tvad}</td>"
-            f"<td>{km_t}</td><td>{km_k}</td><td>{cost}</td><td>{fr}</td>"
-        )
-    html += "</tr>\n"
-
-html += "</table>"
-
-# ─── 7) Atvaizduojame HTML ───────────────────────────────────────────────────
-st.markdown(html, unsafe_allow_html=True)
+# ─── 3) Atvaizduojame AgGrid ──────────────────────────────────────────────────
+AgGrid(
+    df,
+    gridOptions=grid_options,
+    enable_enterprise_modules=False,
+    fit_columns_on_grid_load=True,
+    theme="streamlit"
+)
